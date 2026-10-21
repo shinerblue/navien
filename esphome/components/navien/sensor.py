@@ -63,7 +63,13 @@ CONF_BOILER_ACTIVE              = "boiler_active"
 CONF_CUMULATIVE_DWH_USAGE_HOURS = "total_dhw_usage_hours"
 CONF_CUMULATIVE_SH_USAGE_HOURS  = "total_sh_usage_hours"
 CONF_DAYS_SINCE_INSTALL         = "days_since_install"
+CONF_OPERATING_STATE_CODE       = "operating_state_code"
+CONF_HEATING_MODE_CODE          = "heating_mode_code"
+CONF_RECIRC_MODE_CODE           = "recirc_mode_code"
 CONF_SRC                        = "src"
+CONF_COMMAND_MODE               = "command_mode"
+CONF_COMMAND_MODE_STATUS        = "command_mode_status"
+COMMAND_MODES = {"auto": 0, "legacy": 1, "navilink": 2}
 CONF_OTHER_NAVILINK_INSTALLED   = "other_navilink_installed"
 CONF_ERROR_CODE                 = "error_code"
 CONF_ERROR_LEVEL                = "error_level"
@@ -173,6 +179,23 @@ CONFIG_SCHEMA = cv.All(
                 accuracy_decimals=0,
                 icon="mdi:calendar-clock",
             ),
+            # Raw numeric codes behind the text sensors, so time-series stores that only
+            # keep numbers (Prometheus, VictoriaMetrics) can record state history.
+            cv.Optional(CONF_OPERATING_STATE_CODE): sensor.sensor_schema(
+                accuracy_decimals=0,
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:state-machine",
+            ),
+            cv.Optional(CONF_HEATING_MODE_CODE): sensor.sensor_schema(
+                accuracy_decimals=0,
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:fire",
+            ),
+            cv.Optional(CONF_RECIRC_MODE_CODE): sensor.sensor_schema(
+                accuracy_decimals=0,
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:sync",
+            ),
             cv.Optional(CONF_BOILER_ACTIVE): binary_sensor.binary_sensor_schema(),
             
             cv.Optional(CONF_CONN_STATUS): binary_sensor.binary_sensor_schema(
@@ -194,7 +217,12 @@ CONFIG_SCHEMA = cv.All(
                 icon="mdi:alert-circle",
             ),
             cv.Optional(CONF_REAL_TIME): cv.boolean,
-            cv.Optional(CONF_SRC): cv.int_range(min=0, max=15)
+            cv.Optional(CONF_SRC): cv.int_range(min=0, max=15),
+            cv.Optional(CONF_COMMAND_MODE, default="auto"): cv.one_of(*COMMAND_MODES, lower=True),
+            cv.Optional(CONF_COMMAND_MODE_STATUS): text_sensor.text_sensor_schema(
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:swap-horizontal",
+            ),
         }
     )
     .extend(cv.polling_component_schema("5s"))
@@ -216,6 +244,7 @@ async def to_code(config):
     if CONF_SRC in config:
         src = config[CONF_SRC]
     cg.add(var.set_src(src))
+    cg.add(var.set_command_mode(COMMAND_MODES[config[CONF_COMMAND_MODE]]))
     await cg.register_component(var, config)
 
     dhw_set_temp_config_key = None
@@ -267,6 +296,10 @@ async def to_code(config):
         sens = await binary_sensor.new_binary_sensor(config[CONF_CONN_STATUS])
         cg.add(var.set_conn_status_sensor(sens))
         
+    if CONF_COMMAND_MODE_STATUS in config:
+        sens = await text_sensor.new_text_sensor(config[CONF_COMMAND_MODE_STATUS])
+        cg.add(var.set_command_mode_sensor(sens))
+
     if CONF_RECIRC_MODE in config:
         sens = await text_sensor.new_text_sensor(config[CONF_RECIRC_MODE])
         cg.add(var.set_recirc_mode_sensor(sens))
@@ -314,6 +347,15 @@ async def to_code(config):
     if CONF_DAYS_SINCE_INSTALL in config:
         sens = await sensor.new_sensor(config[CONF_DAYS_SINCE_INSTALL])
         cg.add(var.set_days_since_install_sensor(sens))
+    if CONF_OPERATING_STATE_CODE in config:
+        sens = await sensor.new_sensor(config[CONF_OPERATING_STATE_CODE])
+        cg.add(var.set_operating_state_code_sensor(sens))
+    if CONF_HEATING_MODE_CODE in config:
+        sens = await sensor.new_sensor(config[CONF_HEATING_MODE_CODE])
+        cg.add(var.set_heating_mode_code_sensor(sens))
+    if CONF_RECIRC_MODE_CODE in config:
+        sens = await sensor.new_sensor(config[CONF_RECIRC_MODE_CODE])
+        cg.add(var.set_recirc_mode_code_sensor(sens))
  
     if CONF_OTHER_NAVILINK_INSTALLED in config:
         sens = await binary_sensor.new_binary_sensor(config[CONF_OTHER_NAVILINK_INSTALLED])
