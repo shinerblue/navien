@@ -235,6 +235,11 @@ protected:
   uint32_t last_rx_ms_{0};
   uint32_t last_announce_ms_{0};
   uint32_t last_cmd_ms_{0};
+ public:
+  // Count of headers dropped by the bounds check in receive() (see navien_link.cpp).
+  uint32_t bad_len_count() const { return bad_len_count_; }
+ protected:
+  uint32_t bad_len_count_{0};
 };
 
   

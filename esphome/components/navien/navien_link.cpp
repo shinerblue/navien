@@ -191,6 +191,21 @@ void NavienLink::receive() {
         ESP_LOGV(TAG, "Parsed header. %d bytes of body left", this->recv_buffer.hdr.len);
         // fall through
       case HEADER_PARSED: {
+        // Bounds check (2026-11-06). hdr.len comes straight off the wire. After a false
+        // marker sync (a 0xF7 inside a payload) or a bus collision it is garbage, and
+        // anything >= 122 used to make read_array() write past the 128-byte recv_buffer
+        // into cmd_buffer (std::list pointers) and the heap. The next command queued
+        // through those pointers corrupted ESPHome API frames ("Invalid protobuf message:
+        // BinarySensorStateResponse ... Wire format was corrupt") until a power cycle.
+        // Drop the header and resync on the next marker instead.
+        if (HDR_SIZE + (size_t) this->recv_buffer.hdr.len + 1 > sizeof(this->recv_buffer.raw_data)) {
+          ESP_LOGW(TAG, "Bad packet length %u (max %u) - resyncing", (unsigned) this->recv_buffer.hdr.len,
+                   (unsigned) (sizeof(this->recv_buffer.raw_data) - HDR_SIZE - 1));
+          this->bad_len_count_++;
+          this->recv_state = INITIAL;
+          available = uart->available();
+          break;
+        }
         available = uart->available();
 
         // +1 here is for the checksum - it is in the last byte
